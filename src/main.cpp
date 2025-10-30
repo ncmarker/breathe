@@ -2,6 +2,7 @@
 #include "mesh.h"
 #include "shader.h"
 #include "sphere.h"
+#include "textRenderer.h"
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -62,8 +63,14 @@ int main() {
   // ============================================
   // Radius: Size of the sphere (1.0f = unit sphere)
   // Segments: Resolution (32 = good quality, higher = smoother but slower)
-  Mesh sphere = Sphere::generate(1.0f, 32);
+  Mesh sphere = Sphere::generate(0.8f, 32);
   sphere.setupMesh();
+
+  // ============================================
+  // TEXT RENDERER
+  // ============================================
+  TextRenderer textRenderer(windowWidth, windowHeight);
+  textRenderer.Load("assets/Code.ttf", 48);
 
   // ============================================
   // CAMERA SETUP
@@ -148,6 +155,31 @@ int main() {
 
     // Draw sphere
     sphere.draw();
+
+    // ============================================
+    // TEXT RENDERING
+    // ============================================
+    // Disable depth test for text overlay
+    glDisable(GL_DEPTH_TEST);
+
+    // Enable blending for text transparency
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Render text
+    textRenderer.RenderText("The Breathing Planet", windowWidth / 2.0f - 350.0f,
+                            windowHeight - 80.0f, 1.0f,
+                            glm::vec3(0.9f, 0.9f, 0.9f));
+    textRenderer.RenderText("Breathe", windowWidth / 2.0f - 80.0f,
+                            80.0f, 0.7f,
+                            glm::vec3(0.9f, 0.9f, 0.9f));
+    textRenderer.RenderText("Global CO2: 0 ppm", 50.0f, 100.0f, 0.5f,
+                            glm::vec3(0.9f, 0.9f, 0.9f));
+    textRenderer.RenderText("Year: 2024", 50.0f, 65.0f, 0.5f,
+                            glm::vec3(0.9f, 0.9f, 0.9f));
+
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
 
     glfwSwapBuffers(window);
     glfwPollEvents();

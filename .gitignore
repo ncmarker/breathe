@@ -1,0 +1,34 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Compiled Object files
+*.o
+*.so
+*.dylib
+*.a
+
+# Executables
+breathe
+
+# Build artifacts
+src/*.o
+external/*/*.o
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-*
+
+# Backup files
+*.bak
+*.backup
+*.tmp
+
+# Logs
+*.log
+

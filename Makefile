@@ -30,6 +30,24 @@ ifneq ($(GLFW_FOUND),)
     INCLUDE_DIRS += -I $(GLFW_INC)
 endif
 
+# Try to find FreeType
+FREETYPE_PATHS := /opt/homebrew/Cellar/freetype/2.14.1_1/include/freetype2 \
+                  /opt/homebrew/include/freetype2 \
+                  /opt/homebrew/include \
+                  /usr/local/include/freetype2 \
+                  /usr/include/freetype2
+FREETYPE_FOUND := $(shell find $(FREETYPE_PATHS) -name "ft2build.h" 2>/dev/null | head -1)
+ifneq ($(FREETYPE_FOUND),)
+    FREETYPE_INC := $(shell dirname $(FREETYPE_FOUND))
+    INCLUDE_DIRS += -I $(FREETYPE_INC)
+endif
+
+# Also search for any freetype version under homebrew
+FREETYPE_HOMEBREW := $(wildcard /opt/homebrew/Cellar/freetype/*/include/freetype2)
+ifneq ($(FREETYPE_HOMEBREW),)
+    INCLUDE_DIRS += -I $(firstword $(FREETYPE_HOMEBREW))
+endif
+
 CXXFLAGS := -std=c++17 -O2 -Wall $(INCLUDE_DIRS)
 
 LDFLAGS :=
@@ -37,11 +55,11 @@ LDFLAGS :=
 # Platform-specific linking
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-    # macOS: link glfw and OpenGL framework
-    LDFLAGS += -L /opt/homebrew/lib -lglfw -framework OpenGL
+    # macOS: link glfw, freetype and OpenGL framework
+    LDFLAGS += -L /opt/homebrew/lib -lglfw -lfreetype -framework OpenGL
 else
-    # Linux: link GL and glfw (adjust if needed)
-    LDFLAGS += -lglfw -lGL -ldl
+    # Linux: link GL, glfw, and freetype (adjust if needed)
+    LDFLAGS += -lglfw -lfreetype -lGL -ldl
 endif
 
 # Sources
