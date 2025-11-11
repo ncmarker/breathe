@@ -108,6 +108,23 @@ void Mesh::draw() const {
   glBindVertexArray(0);
 }
 
+void Mesh::drawLines() const {
+  if (!initialized) {
+    std::cerr << "Error: Cannot draw uninitialized mesh.\n";
+    return;
+  }
+
+  glBindVertexArray(VAO);
+
+  if (!indices.empty()) {
+    glDrawElements(GL_LINES, indices.size(), GL_UNSIGNED_INT, 0);
+  } else {
+    glDrawArrays(GL_LINES, 0, vertices.size());
+  }
+
+  glBindVertexArray(0);
+}
+
 void Mesh::drawInstanced(unsigned int instanceCount) const {
   if (!initialized) {
     std::cerr << "Error: Cannot draw uninitialized mesh.\n";

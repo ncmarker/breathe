@@ -48,6 +48,19 @@ ifneq ($(FREETYPE_HOMEBREW),)
     INCLUDE_DIRS += -I $(firstword $(FREETYPE_HOMEBREW))
 endif
 
+# Try to find nlohmann/json headers
+NLOHMANN_PATHS := /opt/homebrew/opt/nlohmann-json/include \
+                  /opt/homebrew/include \
+                  /usr/local/include \
+                  /usr/include
+NLOHMANN_FOUND := $(shell find $(NLOHMANN_PATHS) -name "json.hpp" 2>/dev/null | head -1)
+ifneq ($(NLOHMANN_FOUND),)
+    NLOHMANN_INC := $(shell dirname $(dir $(NLOHMANN_FOUND)))
+    INCLUDE_DIRS += -I $(NLOHMANN_INC)
+else
+    $(warning nlohmann-json headers not found; install with `brew install nlohmann-json`)
+endif
+
 CXXFLAGS := -std=c++17 -O2 -Wall $(INCLUDE_DIRS)
 
 LDFLAGS :=

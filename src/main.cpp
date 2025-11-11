@@ -1,4 +1,5 @@
 #include "../external/glad/include/glad/glad.h"
+#include "geo_borders.h"
 #include "mesh.h"
 #include "shader.h"
 #include "sphere.h"
@@ -71,6 +72,23 @@ int main() {
   // ============================================
   TextRenderer textRenderer(windowWidth, windowHeight);
   textRenderer.Load("assets/Code.ttf", 48);
+
+  // ============================================
+  // COUNTRY BORDERS
+  // ============================================
+  // Load country border data
+  auto borders = GeoBorders::loadBordersFromGeoJSON("data/countries.geo.json");
+  auto borderVertices = GeoBorders::bordersToVertices(borders);
+
+  std::cout << "DEBUG: Created " << borderVertices.size() << " border vertices"
+            << std::endl;
+
+  Mesh borderMesh(borderVertices,
+                  std::vector<uint32_t>()); // Empty indices, just vertices
+  borderMesh.setupMesh();
+
+  // Border shader
+  Shader borderShader("shaders/border.vert", "shaders/border.frag");
 
   // ============================================
   // CAMERA SETUP
@@ -157,6 +175,18 @@ int main() {
     sphere.draw();
 
     // ============================================
+    // COUNTRY BORDER RENDERING
+    // ============================================
+    borderShader.use();
+    borderShader.setMat4("model", model);
+    borderShader.setMat4("view", view);
+    borderShader.setMat4("projection", projection);
+    borderShader.setVec3("borderColor",
+                         glm::vec3(1.0f, 1.0f, 1.0f)); // White borders
+
+    borderMesh.drawLines();
+
+    // ============================================
     // TEXT RENDERING
     // ============================================
     // Disable depth test for text overlay
@@ -170,8 +200,7 @@ int main() {
     textRenderer.RenderText("The Breathing Planet", windowWidth / 2.0f - 350.0f,
                             windowHeight - 80.0f, 1.0f,
                             glm::vec3(0.9f, 0.9f, 0.9f));
-    textRenderer.RenderText("Breathe", windowWidth / 2.0f - 80.0f,
-                            80.0f, 0.7f,
+    textRenderer.RenderText("Breathe", windowWidth / 2.0f - 80.0f, 80.0f, 0.7f,
                             glm::vec3(0.9f, 0.9f, 0.9f));
     textRenderer.RenderText("Global CO2: 0 ppm", 50.0f, 100.0f, 0.5f,
                             glm::vec3(0.9f, 0.9f, 0.9f));

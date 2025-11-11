@@ -33,6 +33,9 @@ public:
 
     // Draw call (binds VAO and issues glDrawElements)
     void draw() const;
+    
+    // Draw with custom mode (GL_TRIANGLES, GL_LINES, etc.)
+    void drawLines() const;
 
     // Draw with instance count
     void drawInstanced(unsigned int instanceCount) const;
