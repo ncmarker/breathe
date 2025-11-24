@@ -3,6 +3,7 @@
 #include "mesh.h"
 #include <glm/glm.hpp>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 struct BorderPoint {
@@ -27,7 +28,12 @@ public:
 
   // Load borders from GeoJSON file
   static std::vector<CountryBorder>
-  loadBordersFromGeoJSON(const std::string &filename);
+  loadBordersFromGeoJSON(const std::string &filename, float radius = 1.0f);
+
+  // Compute approximate centroid direction for each country
+  static std::unordered_map<std::string, glm::vec3>
+  computeCountryCentroids(const std::vector<CountryBorder> &borders,
+                          float radius = 1.0f);
 
   // Generate border line vertices for rendering as a Mesh
   static std::vector<Vertex>

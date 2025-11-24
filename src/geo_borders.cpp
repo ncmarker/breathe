@@ -2,8 +2,8 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <nlohmann/json.hpp>
-
 
 glm::vec3 GeoBorders::latLonToSphere(float lat, float lon, float radius) {
   // Convert degrees to radians
@@ -15,7 +15,7 @@ glm::vec3 GeoBorders::latLonToSphere(float lat, float lon, float radius) {
   // lat = -90 to 90 (south to north), lon = -180 to 180 (west to east)
   float x =
       radius * std::cos(latRad) * std::sin(lonRad); // sin for lon (left/right)
-  float y = radius * std::sin(latRad);                // sin for lat (up/down)
+  float y = radius * std::sin(latRad);              // sin for lat (up/down)
   float z = radius * std::cos(latRad) *
             std::cos(lonRad); // cos for lon (forward/back)
 
@@ -55,7 +55,7 @@ GeoBorders::bordersToVertices(const std::vector<CountryBorder> &borders) {
 
 // load country borders from GeoJSON file
 std::vector<CountryBorder>
-GeoBorders::loadBordersFromGeoJSON(const std::string &filename) {
+GeoBorders::loadBordersFromGeoJSON(const std::string &filename, float radius) {
   std::vector<CountryBorder> borders;
   std::ifstream file(filename);
 
@@ -95,7 +95,6 @@ GeoBorders::loadBordersFromGeoJSON(const std::string &filename) {
   }
 
   const auto &features = *featuresIter;
-  size_t featureCount = features.size();
 
   for (const auto &feature : features) {
     if (!feature.is_object())
@@ -149,7 +148,7 @@ GeoBorders::loadBordersFromGeoJSON(const std::string &filename) {
         borderPoint.longitude = static_cast<float>(lonDeg);
         borderPoint.latitude = static_cast<float>(latDeg);
         borderPoint.position =
-            latLonToSphere(borderPoint.latitude, borderPoint.longitude, 0.805f);
+            latLonToSphere(borderPoint.latitude, borderPoint.longitude, radius);
 
         ring.push_back(borderPoint);
       }
@@ -185,13 +184,64 @@ GeoBorders::loadBordersFromGeoJSON(const std::string &filename) {
     }
   }
 
-  std::cout << "Found " << featureCount << " features, loaded "
-            << borders.size() << " country borders from GeoJSON" << std::endl;
-
   if (borders.empty()) {
     std::cerr << "WARNING: No borders were parsed from GeoJSON file"
               << std::endl;
   }
 
   return borders;
+}
+
+std::unordered_map<std::string, glm::vec3>
+GeoBorders::computeCountryCentroids(const std::vector<CountryBorder> &borders,
+                                    float radius) {
+  std::unordered_map<std::string, glm::vec3> centroids;
+  centroids.reserve(borders.size());
+
+  for (const auto &border : borders) {
+    if (border.countryCode.empty())
+      continue;
+
+    // For countries with multiple disconnected regions (like USA with
+    // Alaska/Hawaii), use the largest ring to compute the centroid to avoid
+    // skewing
+    const std::vector<BorderPoint> *largestRing = nullptr;
+    size_t largestRingSize = 0;
+
+    for (const auto &ring : border.rings) {
+      if (ring.size() > largestRingSize) {
+        largestRingSize = ring.size();
+        largestRing = &ring;
+      }
+    }
+
+    if (largestRing == nullptr || largestRingSize == 0)
+      continue;
+
+    // Compute centroid from the largest ring only
+    glm::vec3 sum(0.0f);
+    size_t count = 0;
+
+    for (const auto &point : *largestRing) {
+      float length = glm::length(point.position);
+      if (length <= std::numeric_limits<float>::epsilon())
+        continue;
+
+      sum += point.position / length;
+      ++count;
+    }
+
+    if (count == 0)
+      continue;
+
+    glm::vec3 direction = glm::normalize(sum / static_cast<float>(count));
+
+    if (!std::isfinite(direction.x) || !std::isfinite(direction.y) ||
+        !std::isfinite(direction.z))
+      continue;
+
+    centroids[border.countryCode] = direction * radius;
+  }
+
+  return centroids;
 }

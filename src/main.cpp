@@ -1,17 +1,33 @@
 #include "../external/glad/include/glad/glad.h"
+#include "co2_data.h"
 #include "geo_borders.h"
 #include "mesh.h"
 #include "shader.h"
 #include "sphere.h"
 #include "textRenderer.h"
 #include <GLFW/glfw3.h>
+#include <algorithm>
+#include <cmath>
 #include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
+#include <limits>
+#include <sstream>
+#include <unordered_map>
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window);
+
+namespace {
+constexpr float SPHERE_RADIUS = 0.8f;
+constexpr float BORDER_RADIUS = SPHERE_RADIUS * 1.002f;
+constexpr float MARKER_ALTITUDE = 0.02f;
+constexpr float MIN_MARKER_RADIUS = 0.01f;
+constexpr float MAX_MARKER_RADIUS = 0.15f;
+constexpr int MARKER_SEGMENTS = 24;
+} // namespace
 
 int main() {
   if (!glfwInit()) {
@@ -64,7 +80,7 @@ int main() {
   // ============================================
   // Radius: Size of the sphere (1.0f = unit sphere)
   // Segments: Resolution (32 = good quality, higher = smoother but slower)
-  Mesh sphere = Sphere::generate(0.8f, 32);
+  Mesh sphere = Sphere::generate(SPHERE_RADIUS, 32);
   sphere.setupMesh();
 
   // ============================================
@@ -77,18 +93,164 @@ int main() {
   // COUNTRY BORDERS
   // ============================================
   // Load country border data
-  auto borders = GeoBorders::loadBordersFromGeoJSON("data/countries.geo.json");
+  auto borders = GeoBorders::loadBordersFromGeoJSON("data/countries.geo.json",
+                                                    BORDER_RADIUS);
   auto borderVertices = GeoBorders::bordersToVertices(borders);
-
-  std::cout << "DEBUG: Created " << borderVertices.size() << " border vertices"
-            << std::endl;
-
   Mesh borderMesh(borderVertices,
                   std::vector<uint32_t>()); // Empty indices, just vertices
   borderMesh.setupMesh();
 
   // Border shader
   Shader borderShader("shaders/border.vert", "shaders/border.frag");
+
+  // ============================================
+  // CO₂ DATA VISUALIZATION
+  // ============================================
+  auto countryCentroids =
+      GeoBorders::computeCountryCentroids(borders, SPHERE_RADIUS);
+
+  CO2DataSet co2Data;
+  bool co2Loaded = co2Data.loadFromCsv(
+      "data/annual-co-emissions-by-region.csv");
+  int currentYear = co2Loaded ? co2Data.latestYear() : 0;
+
+  std::string globalCO2Label = "Global CO2: --";
+  std::string yearLabelText = "Year: --";
+  double totalEmissionForYear = 0.0;
+
+  Mesh markerMesh;
+  bool markersAvailable = false;
+  Shader dataShader("shaders/data.vert", "shaders/data.frag");
+
+  if (co2Loaded && currentYear > 0) {
+    totalEmissionForYear = 0.0;
+    std::vector<std::pair<std::string, double>> emissions;
+    emissions.reserve(countryCentroids.size());
+
+    double minEmission = std::numeric_limits<double>::max();
+    double maxEmission = std::numeric_limits<double>::lowest();
+
+    // Collect emissions for all countries that have data for the current year
+    for (const auto &entry : countryCentroids) {
+      auto emission = co2Data.getEmission(entry.first, currentYear);
+      if (!emission.has_value())
+        continue;
+
+      emissions.emplace_back(entry.first, emission.value());
+      emissions.emplace_back(entry.first, emission.value());
+      totalEmissionForYear += emission.value();
+      minEmission = std::min(minEmission, emission.value());
+      maxEmission = std::max(maxEmission, emission.value());
+    }
+
+    // Create circular markers for each country with CO2 data
+    if (!emissions.empty() && std::isfinite(minEmission) &&
+        std::isfinite(maxEmission)) {
+      std::vector<Vertex> markerVertices;
+      std::vector<uint32_t> markerIndices;
+      markerVertices.reserve(emissions.size() * (MARKER_SEGMENTS + 1));
+      markerIndices.reserve(emissions.size() * MARKER_SEGMENTS * 3);
+
+      const float liftedRadius = SPHERE_RADIUS + MARKER_ALTITUDE;
+      const float angleStep =
+          glm::two_pi<float>() / static_cast<float>(MARKER_SEGMENTS);
+
+      // Build circular markers for each country
+      for (const auto &item : emissions) {
+        const auto centroidIt = countryCentroids.find(item.first);
+        if (centroidIt == countryCentroids.end())
+          continue;
+
+        // Get the country's centroid position on the sphere
+        glm::vec3 basePosition = centroidIt->second;
+        if (glm::length(basePosition) <= std::numeric_limits<float>::epsilon())
+          continue;
+
+        // Position marker slightly above the sphere surface to avoid z-fighting
+        glm::vec3 normal = glm::normalize(basePosition);
+        glm::vec3 markerCenter = normal * liftedRadius;
+
+        // Normalize emission value to 0.0-1.0 range for size scaling
+        float normalizedValue = 1.0f;
+        if (maxEmission > minEmission) {
+          normalizedValue = static_cast<float>((item.second - minEmission) /
+                                               (maxEmission - minEmission));
+        }
+
+        // Calculate marker size based on normalized emission value
+        // Larger emissions = larger circles
+        float markerRadius =
+            MIN_MARKER_RADIUS +
+            normalizedValue * (MAX_MARKER_RADIUS - MIN_MARKER_RADIUS);
+
+        // Create tangent and bitangent vectors for building the circle in the
+        // plane perpendicular to the sphere surface
+        glm::vec3 tangent = glm::cross(normal, glm::vec3(0.0f, 1.0f, 0.0f));
+        if (glm::length(tangent) < 1e-4f) {
+          tangent = glm::cross(normal, glm::vec3(1.0f, 0.0f, 0.0f));
+        }
+        tangent = glm::normalize(tangent);
+        glm::vec3 bitangent = glm::normalize(glm::cross(normal, tangent));
+
+        // Create a circular marker by building a fan of triangles
+        // Center vertex
+        uint32_t startIndex = static_cast<uint32_t>(markerVertices.size());
+        Vertex centerVertex;
+        centerVertex.position = markerCenter;
+        centerVertex.normal = normal;
+        centerVertex.uv = glm::vec2(normalizedValue, 0.0f);
+        markerVertices.push_back(centerVertex);
+
+        // Create vertices around the circle perimeter
+        for (int i = 0; i < MARKER_SEGMENTS; ++i) {
+          float angle = angleStep * static_cast<float>(i);
+          glm::vec3 offset =
+              std::cos(angle) * tangent + std::sin(angle) * bitangent;
+
+          Vertex v;
+          v.position = markerCenter + offset * markerRadius;
+          v.normal = normal;
+          v.uv = glm::vec2(normalizedValue, 0.0f);
+          markerVertices.push_back(v);
+        }
+
+        // Create triangle indices (fan from center to perimeter)
+        for (int i = 1; i <= MARKER_SEGMENTS; ++i) {
+          uint32_t current = startIndex + i;
+          uint32_t next =
+              (i == MARKER_SEGMENTS) ? startIndex + 1 : startIndex + i + 1;
+          markerIndices.push_back(startIndex);
+          markerIndices.push_back(current);
+          markerIndices.push_back(next);
+        }
+      }
+
+      if (!markerVertices.empty()) {
+        markerMesh = Mesh(markerVertices, markerIndices);
+        markerMesh.setupMesh();
+        markersAvailable = true;
+      }
+    }
+  }
+
+  // ============================================
+  // SET UP TEXT LABELS
+  // ============================================
+  if (co2Loaded && currentYear > 0) {
+    yearLabelText = "Year: " + std::to_string(currentYear);
+
+    if (markersAvailable) {
+      std::ostringstream oss;
+      oss.setf(std::ios::fixed);
+      oss.precision(2);
+
+      double totalGt = totalEmissionForYear * 1e-9;
+      oss << "Global CO2: " << totalGt << " Gt";
+      globalCO2Label = oss.str();
+    } else {
+      globalCO2Label = "Global CO2: data unavailable";
+    }
+  }
 
   // ============================================
   // CAMERA SETUP
@@ -109,7 +271,8 @@ int main() {
   // ============================================
   // ANIMATION SETUP
   // ============================================
-  // angle: Current rotation angle (increases each frame)
+  // Rotation angle for the globe (increases each frame for continuous rotation)
+  // To change rotation speed, modify the increment value in the render loop
   float angle = 0.0f;
 
   while (!glfwWindowShouldClose(window)) {
@@ -125,7 +288,8 @@ int main() {
     // ============================================
     // ANIMATION UPDATE
     // ============================================
-    // Change 0.01f to make rotation faster/slower
+    // Rotate the globe continuously
+    // To change rotation speed: increase value for faster, decrease for slower
     angle += 0.01f;
 
     // ============================================
@@ -187,6 +351,18 @@ int main() {
     borderMesh.drawLines();
 
     // ============================================
+    // CO₂ MARKER RENDERING
+    // ============================================
+    if (markersAvailable) {
+      dataShader.use();
+      dataShader.setMat4("model", model);
+      dataShader.setMat4("view", view);
+      dataShader.setMat4("projection", projection);
+      dataShader.setVec3("baseColor", glm::vec3(1.0f, 0.2f, 0.1f));
+      markerMesh.draw();
+    }
+
+    // ============================================
     // TEXT RENDERING
     // ============================================
     // Disable depth test for text overlay
@@ -202,9 +378,9 @@ int main() {
                             glm::vec3(0.9f, 0.9f, 0.9f));
     textRenderer.RenderText("Breathe", windowWidth / 2.0f - 80.0f, 80.0f, 0.7f,
                             glm::vec3(0.9f, 0.9f, 0.9f));
-    textRenderer.RenderText("Global CO2: 0 ppm", 50.0f, 100.0f, 0.5f,
+    textRenderer.RenderText(globalCO2Label, 50.0f, 100.0f, 0.5f,
                             glm::vec3(0.9f, 0.9f, 0.9f));
-    textRenderer.RenderText("Year: 2024", 50.0f, 65.0f, 0.5f,
+    textRenderer.RenderText(yearLabelText, 50.0f, 65.0f, 0.5f,
                             glm::vec3(0.9f, 0.9f, 0.9f));
 
     glDisable(GL_BLEND);
