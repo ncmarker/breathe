@@ -16,9 +16,8 @@ void trim(std::string &s) {
 }
 
 std::string toUpperCopy(std::string value) {
-  std::transform(
-      value.begin(), value.end(), value.begin(),
-      [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
   return value;
 }
 
@@ -71,8 +70,7 @@ bool CO2DataSet::loadFromCsv(const std::string &csvPath) {
     try {
       year = std::stoi(yearStr);
     } catch (const std::exception &) {
-      std::cerr << "WARNING: Invalid year at line " << lineNumber << " ("
-                << yearStr << ")\n";
+      std::cerr << "WARNING: Invalid year at line " << lineNumber << " (" << yearStr << ")\n";
       continue;
     }
 
@@ -83,8 +81,7 @@ bool CO2DataSet::loadFromCsv(const std::string &csvPath) {
     try {
       value = std::stod(valueStr);
     } catch (const std::exception &) {
-      std::cerr << "WARNING: Invalid emission value at line " << lineNumber
-                << " (" << valueStr << ")\n";
+      std::cerr << "WARNING: Invalid emission value at line " << lineNumber << " (" << valueStr << ")\n";
       continue;
     }
 
@@ -112,8 +109,17 @@ bool CO2DataSet::loadFromCsv(const std::string &csvPath) {
   return true;
 }
 
-std::optional<double> CO2DataSet::getEmission(const std::string &isoCode,
-                                              int year) const {
+double CO2DataSet::getGlobalMaxEmission() const {
+  double maxEmission = 0.0;
+  for (const auto &record : data) {
+    for (const auto &yearEmission : record.second.emissionsByYear) {
+      maxEmission = std::max(maxEmission, yearEmission.second);
+    }
+  }
+  return maxEmission;
+}
+
+std::optional<double> CO2DataSet::getEmission(const std::string &isoCode, int year) const {
   if (isoCode.empty())
     return std::nullopt;
 

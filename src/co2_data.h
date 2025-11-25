@@ -8,8 +8,7 @@
 
 struct CountryEmissionRecord {
   std::string isoCode;
-  std::map<int, double>
-      emissionsByYear; // year -> annual CO2 emissions (tonnes)
+  std::map<int, double> emissionsByYear; // year -> annual CO2 emissions (tonnes)
 };
 
 class CO2DataSet {
@@ -18,11 +17,17 @@ public:
 
   std::optional<double> getEmission(const std::string &isoCode, int year) const;
 
-  int earliestYear() const { return minYear; }
-  int latestYear() const { return maxYear; }
+  int earliestYear() const {
+    return minYear;
+  }
+  int latestYear() const {
+    return maxYear;
+  }
 
-  const std::unordered_map<std::string, CountryEmissionRecord> &
-  records() const {
+  // Get the maximum emission value across all countries and years
+  double getGlobalMaxEmission() const;
+
+  const std::unordered_map<std::string, CountryEmissionRecord> &records() const {
     return data;
   }
 

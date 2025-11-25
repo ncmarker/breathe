@@ -13,18 +13,15 @@ glm::vec3 GeoBorders::latLonToSphere(float lat, float lon, float radius) {
   // Convert to 3D cartesian coordinates on a sphere
   // Match the sphere generator's coordinate system
   // lat = -90 to 90 (south to north), lon = -180 to 180 (west to east)
-  float x =
-      radius * std::cos(latRad) * std::sin(lonRad); // sin for lon (left/right)
-  float y = radius * std::sin(latRad);              // sin for lat (up/down)
-  float z = radius * std::cos(latRad) *
-            std::cos(lonRad); // cos for lon (forward/back)
+  float x = radius * std::cos(latRad) * std::sin(lonRad); // sin for lon (left/right)
+  float y = radius * std::sin(latRad);                    // sin for lat (up/down)
+  float z = radius * std::cos(latRad) * std::cos(lonRad); // cos for lon (forward/back)
 
   return glm::vec3(x, y, z);
 }
 
 // convert borders to vertices for rendering
-std::vector<Vertex>
-GeoBorders::bordersToVertices(const std::vector<CountryBorder> &borders) {
+std::vector<Vertex> GeoBorders::bordersToVertices(const std::vector<CountryBorder> &borders) {
   std::vector<Vertex> vertices;
 
   for (const auto &country : borders) {
@@ -54,14 +51,12 @@ GeoBorders::bordersToVertices(const std::vector<CountryBorder> &borders) {
 }
 
 // load country borders from GeoJSON file
-std::vector<CountryBorder>
-GeoBorders::loadBordersFromGeoJSON(const std::string &filename, float radius) {
+std::vector<CountryBorder> GeoBorders::loadBordersFromGeoJSON(const std::string &filename, float radius) {
   std::vector<CountryBorder> borders;
   std::ifstream file(filename);
 
   if (!file.is_open()) {
-    std::cerr << "ERROR: Could not open GeoJSON file: " << filename
-              << std::endl;
+    std::cerr << "ERROR: Could not open GeoJSON file: " << filename << std::endl;
     return borders;
   }
 
@@ -69,28 +64,24 @@ GeoBorders::loadBordersFromGeoJSON(const std::string &filename, float radius) {
   try {
     file >> document;
   } catch (const nlohmann::json::parse_error &err) {
-    std::cerr << "ERROR: Failed to parse GeoJSON '" << filename
-              << "': " << err.what() << std::endl;
+    std::cerr << "ERROR: Failed to parse GeoJSON '" << filename << "': " << err.what() << std::endl;
     return borders;
   }
 
   if (!document.is_object()) {
-    std::cerr << "ERROR: GeoJSON root is not an object in file: " << filename
-              << std::endl;
+    std::cerr << "ERROR: GeoJSON root is not an object in file: " << filename << std::endl;
     return borders;
   }
 
   const std::string type = document.value("type", "");
   if (type != "FeatureCollection") {
-    std::cerr << "ERROR: Expected GeoJSON FeatureCollection, got '" << type
-              << "' in file: " << filename << std::endl;
+    std::cerr << "ERROR: Expected GeoJSON FeatureCollection, got '" << type << "' in file: " << filename << std::endl;
     return borders;
   }
 
   const auto featuresIter = document.find("features");
   if (featuresIter == document.end() || !featuresIter->is_array()) {
-    std::cerr << "ERROR: GeoJSON FeatureCollection lacks 'features' array: "
-              << filename << std::endl;
+    std::cerr << "ERROR: GeoJSON FeatureCollection lacks 'features' array: " << filename << std::endl;
     return borders;
   }
 
@@ -104,13 +95,11 @@ GeoBorders::loadBordersFromGeoJSON(const std::string &filename, float radius) {
 
     if (feature.contains("id") && feature["id"].is_string()) {
       border.countryCode = feature["id"].get<std::string>();
-    } else if (feature.contains("properties") &&
-               feature["properties"].is_object()) {
+    } else if (feature.contains("properties") && feature["properties"].is_object()) {
       const auto &properties = feature["properties"];
       if (properties.contains("ISO_A3") && properties["ISO_A3"].is_string()) {
         border.countryCode = properties["ISO_A3"].get<std::string>();
-      } else if (properties.contains("ADMIN") &&
-                 properties["ADMIN"].is_string()) {
+      } else if (properties.contains("ADMIN") && properties["ADMIN"].is_string()) {
         border.countryCode = properties["ADMIN"].get<std::string>();
       }
     }
@@ -147,8 +136,7 @@ GeoBorders::loadBordersFromGeoJSON(const std::string &filename, float radius) {
         BorderPoint borderPoint;
         borderPoint.longitude = static_cast<float>(lonDeg);
         borderPoint.latitude = static_cast<float>(latDeg);
-        borderPoint.position =
-            latLonToSphere(borderPoint.latitude, borderPoint.longitude, radius);
+        borderPoint.position = latLonToSphere(borderPoint.latitude, borderPoint.longitude, radius);
 
         ring.push_back(borderPoint);
       }
@@ -175,8 +163,8 @@ GeoBorders::loadBordersFromGeoJSON(const std::string &filename, float radius) {
         }
       }
     } else {
-      std::cerr << "WARNING: Unsupported geometry type '" << geomType
-                << "' encountered in GeoJSON file: " << filename << std::endl;
+      std::cerr << "WARNING: Unsupported geometry type '" << geomType << "' encountered in GeoJSON file: " << filename
+                << std::endl;
     }
 
     if (!border.rings.empty()) {
@@ -185,16 +173,14 @@ GeoBorders::loadBordersFromGeoJSON(const std::string &filename, float radius) {
   }
 
   if (borders.empty()) {
-    std::cerr << "WARNING: No borders were parsed from GeoJSON file"
-              << std::endl;
+    std::cerr << "WARNING: No borders were parsed from GeoJSON file" << std::endl;
   }
 
   return borders;
 }
 
-std::unordered_map<std::string, glm::vec3>
-GeoBorders::computeCountryCentroids(const std::vector<CountryBorder> &borders,
-                                    float radius) {
+std::unordered_map<std::string, glm::vec3> GeoBorders::computeCountryCentroids(
+  const std::vector<CountryBorder> &borders, float radius) {
   std::unordered_map<std::string, glm::vec3> centroids;
   centroids.reserve(borders.size());
 
@@ -236,8 +222,7 @@ GeoBorders::computeCountryCentroids(const std::vector<CountryBorder> &borders,
 
     glm::vec3 direction = glm::normalize(sum / static_cast<float>(count));
 
-    if (!std::isfinite(direction.x) || !std::isfinite(direction.y) ||
-        !std::isfinite(direction.z))
+    if (!std::isfinite(direction.x) || !std::isfinite(direction.y) || !std::isfinite(direction.z))
       continue;
 
     centroids[border.countryCode] = direction * radius;
