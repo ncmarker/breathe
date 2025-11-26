@@ -121,11 +121,11 @@ int main() {
   // MARKER BUILDER
   // ============================================
   MarkerConfig markerConfig;
-  markerConfig.minRadius = 0.01f;
-  markerConfig.maxRadius = 0.15f;
+  markerConfig.minRadius = 0.02f;
+  markerConfig.maxRadius = 0.5f;
   markerConfig.altitude = 0.02f;
   markerConfig.segments = 24;
-  markerConfig.scaleFactor = 1.0e-10;
+  markerConfig.scaleFactor = 3.0e-10;
   MarkerBuilder markerBuilder(markerConfig);
 
   // ============================================
@@ -280,12 +280,21 @@ int main() {
     // CO₂ MARKER RENDERING
     // ============================================
     if (markersAvailable) {
+      // Use standard alpha blending for matte smog appearance
+      // This prevents the "glowing light" effect and makes it look more like fog
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // Standard alpha blending
+      glDepthMask(GL_FALSE);                             // Don't write to depth buffer for transparency
+
       dataShader.use();
       dataShader.setMat4("model", model);
       dataShader.setMat4("view", view);
       dataShader.setMat4("projection", projection);
-      dataShader.setVec3("baseColor", glm::vec3(1.0f, 0.2f, 0.1f));
+      dataShader.setFloat("uTime", angle); // Pass time for future animations
       markerMesh.draw();
+
+      // Restore depth writing
+      glDepthMask(GL_TRUE);
     }
 
     // ============================================

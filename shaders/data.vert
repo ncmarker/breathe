@@ -5,6 +5,7 @@ layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec2 aUV;
 
 out vec2 vUV;
+out vec3 vWorldPos; // World position (for potential future use)
 
 uniform mat4 model;
 uniform mat4 view;
@@ -13,7 +14,11 @@ uniform mat4 projection;
 void main()
 {
     vUV = aUV;
-    gl_Position = projection * view * model * vec4(aPosition, 1.0);
+    vec4 worldPos = model * vec4(aPosition, 1.0);
+    vWorldPos = worldPos.xyz;
+    
+    // UV.y interpolation (0.0 = center, 1.0 = edge) works well for triangle fan geometry
+    gl_Position = projection * view * worldPos;
 }
 
 
