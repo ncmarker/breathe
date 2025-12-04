@@ -19,8 +19,21 @@
 #include <sstream>
 #include <unordered_map>
 
+struct MouseState {
+  bool *isDragging;
+  double *lastMouseX;
+  double *lastMouseY;
+  float *cameraAzimuth;
+  float *cameraElevation;
+  float *angle;
+  float *initialAzimuth;
+  float *initialElevation;
+};
+
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window, YearController &yearController);
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
+void cursor_position_callback(GLFWwindow *window, double xpos, double ypos);
 
 namespace {
 constexpr float SPHERE_RADIUS = 0.8f;
@@ -155,12 +168,23 @@ int main() {
   // ============================================
   // CAMERA SETUP
   // ============================================
-  // cameraPos: Where the camera is in 3D space
-  // cameraTarget: What the camera is looking at
-  // cameraUp: Which direction is "up" for the camera
-  glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+  const float cameraDistance = 3.0f;
+  float initialAzimuth = 0.0f;
+  float initialElevation = 0.0f;
+  float cameraAzimuth = initialAzimuth;     // Horizontal rotation (around Y-axis)
+  float cameraElevation = initialElevation; // Vertical angle (from horizontal plane)
+
   glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
   glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+  auto updateCameraPosition = [&]() {
+    float x = cameraDistance * std::cos(cameraElevation) * std::sin(cameraAzimuth);
+    float y = cameraDistance * std::sin(cameraElevation);
+    float z = cameraDistance * std::cos(cameraElevation) * std::cos(cameraAzimuth);
+    return glm::vec3(x, y, z);
+  };
+
+  glm::vec3 cameraPos = updateCameraPosition();
 
   // ============================================
   // LIGHTING SETUP
@@ -169,11 +193,31 @@ int main() {
   glm::vec3 lightPos = glm::vec3(2.0f, 2.0f, 2.0f);
 
   // ============================================
+  // MOUSE INPUT SETUP
+  // ============================================
+  bool isDragging = false;
+  double lastMouseX = 0.0;
+  double lastMouseY = 0.0;
+
+  glfwSetMouseButtonCallback(window, mouse_button_callback);
+  glfwSetCursorPosCallback(window, cursor_position_callback);
+
+  MouseState mouseState;
+  mouseState.isDragging = &isDragging;
+  mouseState.lastMouseX = &lastMouseX;
+  mouseState.lastMouseY = &lastMouseY;
+  mouseState.cameraAzimuth = &cameraAzimuth;
+  mouseState.cameraElevation = &cameraElevation;
+  mouseState.initialAzimuth = &initialAzimuth;
+  mouseState.initialElevation = &initialElevation;
+
+  glfwSetWindowUserPointer(window, &mouseState);
+
+  // ============================================
   // ANIMATION SETUP
   // ============================================
-  // Rotation angle for the globe (increases each frame for continuous rotation)
-  // To change rotation speed, modify the increment value in the render loop
   float angle = 0.0f;
+  mouseState.angle = &angle;
 
   while (!glfwWindowShouldClose(window)) {
     processInput(window, yearController);
@@ -217,9 +261,11 @@ int main() {
     // ============================================
     // ANIMATION UPDATE
     // ============================================
-    // Rotate the globe continuously
-    // To change rotation speed: increase value for faster, decrease for slower
-    angle += 0.01f;
+    if (!isDragging) {
+      angle += 0.01f;
+    }
+
+    cameraPos = updateCameraPosition();
 
     // ============================================
     // TRANSFORM MATRICES
@@ -330,6 +376,21 @@ void processInput(GLFWwindow *window, YearController &yearController) {
   if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
     glfwSetWindowShouldClose(window, true);
 
+  // Reset camera position with 'r' key
+  static bool rPressed = false;
+  if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
+    if (!rPressed) {
+      MouseState *state = static_cast<MouseState *>(glfwGetWindowUserPointer(window));
+      if (state) {
+        *state->cameraAzimuth = *state->initialAzimuth;
+        *state->cameraElevation = *state->initialElevation;
+      }
+      rPressed = true;
+    }
+  } else {
+    rPressed = false;
+  }
+
   // Arrow key controls for year navigation
   static bool leftPressed = false;
   static bool rightPressed = false;
@@ -355,4 +416,35 @@ void processInput(GLFWwindow *window, YearController &yearController) {
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
   glViewport(0, 0, width, height);
+}
+
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
+  if (button == GLFW_MOUSE_BUTTON_LEFT) {
+    MouseState *state = static_cast<MouseState *>(glfwGetWindowUserPointer(window));
+    if (action == GLFW_PRESS) {
+      *state->isDragging = true;
+      glfwGetCursorPos(window, state->lastMouseX, state->lastMouseY);
+    } else if (action == GLFW_RELEASE) {
+      *state->isDragging = false;
+    }
+  }
+}
+
+void cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
+  MouseState *state = static_cast<MouseState *>(glfwGetWindowUserPointer(window));
+
+  if (*state->isDragging) {
+    double deltaX = xpos - *state->lastMouseX;
+    double deltaY = ypos - *state->lastMouseY;
+
+    const float sensitivity = 0.005f;
+    *state->cameraAzimuth -= static_cast<float>(deltaX) * sensitivity;
+    *state->cameraElevation += static_cast<float>(deltaY) * sensitivity;
+
+    const float maxElevation = glm::half_pi<float>() - 0.1f;
+    *state->cameraElevation = std::clamp(*state->cameraElevation, -maxElevation, maxElevation);
+
+    *state->lastMouseX = xpos;
+    *state->lastMouseY = ypos;
+  }
 }
