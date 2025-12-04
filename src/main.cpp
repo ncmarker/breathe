@@ -1,4 +1,5 @@
 #include "../external/glad/include/glad/glad.h"
+#include "breathe_animation.h"
 #include "co2_data.h"
 #include "geo_borders.h"
 #include "marker_builder.h"
@@ -31,7 +32,7 @@ struct MouseState {
 };
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
-void processInput(GLFWwindow *window, YearController &yearController);
+void processInput(GLFWwindow *window, YearController &yearController, BreatheAnimation &breatheAnimation);
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 void cursor_position_callback(GLFWwindow *window, double xpos, double ypos);
 
@@ -131,6 +132,13 @@ int main() {
   }
 
   // ============================================
+  // BREATHE ANIMATION
+  // ============================================
+  BreatheAnimation breatheAnimation;
+  breatheAnimation.setMaxYear(yearController.getLatestYear());
+  breatheAnimation.setDuration(3.0f);
+
+  // ============================================
   // MARKER BUILDER
   // ============================================
   MarkerConfig markerConfig;
@@ -220,11 +228,19 @@ int main() {
   mouseState.angle = &angle;
 
   while (!glfwWindowShouldClose(window)) {
-    processInput(window, yearController);
+    processInput(window, yearController, breatheAnimation);
+
+    // Update breathe animation (may modify year during animation)
+    bool shouldUpdateMarkers = false;
+    int currentYear = yearController.getCurrentYear();
+    breatheAnimation.update(glfwGetTime(), currentYear, shouldUpdateMarkers);
+    if (shouldUpdateMarkers) {
+      yearController.setYear(currentYear);
+    }
 
     // Check if year changed and rebuild markers if needed
-    static int lastYear = yearController.getCurrentYear();
-    int currentYear = yearController.getCurrentYear();
+    static int lastYear = -1;
+    currentYear = yearController.getCurrentYear();
     if (currentYear != lastYear && co2Loaded) {
       auto [mesh, totalEmission, success] =
         markerBuilder.buildMarkers(currentYear, co2Data, countryCentroids, SPHERE_RADIUS);
@@ -283,9 +299,10 @@ int main() {
     // ============================================
     // MODEL TRANSFORMATION
     // ============================================
-    // Model matrix: Position, rotation, and scale of the sphere in world space
-    glm::mat4 model = glm::mat4(1.0f);                              // Start with identity matrix
-    model = glm::rotate(model, angle, glm::vec3(0.0f, 1.0f, 0.0f)); // Rotate around Y-axis
+    float breatheScale = breatheAnimation.getScale();
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::scale(model, glm::vec3(breatheScale));
+    model = glm::rotate(model, angle, glm::vec3(0.0f, 1.0f, 0.0f));
 
     // ============================================
     // SHADER SETUP
@@ -371,10 +388,25 @@ int main() {
   return 0;
 }
 
-void processInput(GLFWwindow *window, YearController &yearController) {
+void processInput(GLFWwindow *window, YearController &yearController, BreatheAnimation &breatheAnimation) {
   // Close window on escape press
   if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
     glfwSetWindowShouldClose(window, true);
+
+  // Start breathe animation with 'b' key (only if not at latest year)
+  static bool bPressed = false;
+  if (glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS) {
+    if (!bPressed && !breatheAnimation.getIsActive()) {
+      int currentYear = yearController.getCurrentYear();
+      int latestYear = yearController.getLatestYear();
+      if (currentYear < latestYear) {
+        breatheAnimation.start(currentYear, YEAR_INCREMENT);
+        bPressed = true;
+      }
+    }
+  } else {
+    bPressed = false;
+  }
 
   // Reset camera position with 'r' key
   static bool rPressed = false;
@@ -391,26 +423,28 @@ void processInput(GLFWwindow *window, YearController &yearController) {
     rPressed = false;
   }
 
-  // Arrow key controls for year navigation
-  static bool leftPressed = false;
-  static bool rightPressed = false;
+  // Arrow key controls for year navigation (disabled during breathe animation)
+  if (!breatheAnimation.getIsActive()) {
+    static bool leftPressed = false;
+    static bool rightPressed = false;
 
-  if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-    if (!leftPressed) {
-      yearController.decrementYear(YEAR_INCREMENT);
-      leftPressed = true;
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+      if (!leftPressed) {
+        yearController.decrementYear(YEAR_INCREMENT);
+        leftPressed = true;
+      }
+    } else {
+      leftPressed = false;
     }
-  } else {
-    leftPressed = false;
-  }
 
-  if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-    if (!rightPressed) {
-      yearController.incrementYear(YEAR_INCREMENT);
-      rightPressed = true;
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+      if (!rightPressed) {
+        yearController.incrementYear(YEAR_INCREMENT);
+        rightPressed = true;
+      }
+    } else {
+      rightPressed = false;
     }
-  } else {
-    rightPressed = false;
   }
 }
 
