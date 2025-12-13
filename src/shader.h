@@ -12,6 +12,8 @@ public:
   Shader() = default;
   // Construct and compile/link immediately from file paths
   Shader(const std::string &vertexPath, const std::string &fragmentPath);
+  // Construct with optional geometry shader
+  Shader(const std::string &vertexPath, const std::string &fragmentPath, const std::string &geometryPath);
 
   // Non-copyable (OpenGL handle management)
   Shader(const Shader &) = delete;

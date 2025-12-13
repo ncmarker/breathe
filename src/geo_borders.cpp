@@ -20,37 +20,44 @@ glm::vec3 GeoBorders::latLonToSphere(float lat, float lon, float radius) {
   return glm::vec3(x, y, z);
 }
 
-// convert borders to vertices for rendering
-std::vector<Vertex> GeoBorders::bordersToVertices(const std::vector<CountryBorder> &borders) {
+// Convert borders to vertices with indices for line strips using primitive restart
+// This prevents unwanted connections between separate countries/rings
+std::pair<std::vector<Vertex>, std::vector<uint32_t>> GeoBorders::bordersToVerticesWithIndices(
+  const std::vector<CountryBorder> &borders) {
   std::vector<Vertex> vertices;
+  std::vector<uint32_t> indices;
+
+  const uint32_t PRIMITIVE_RESTART = 0xFFFFFFFF; // OpenGL primitive restart index
 
   for (const auto &country : borders) {
     for (const auto &ring : country.rings) {
       if (ring.size() < 2)
         continue;
 
-      // Create line segments from the ring
+      uint32_t ringStartIndex = static_cast<uint32_t>(vertices.size());
+
+      // Add vertices for this ring
       for (size_t i = 0; i < ring.size(); ++i) {
-        Vertex v1, v2;
-        v1.position = ring[i].position;
-        v1.normal = glm::normalize(ring[i].position);
-        v1.uv = glm::vec2(0.0f, 0.0f); // Not used for borders
-
-        size_t nextIdx = (i + 1) % ring.size();
-        v2.position = ring[nextIdx].position;
-        v2.normal = glm::normalize(ring[nextIdx].position);
-        v2.uv = glm::vec2(0.0f, 0.0f); // Not used for borders
-
-        vertices.push_back(v1);
-        vertices.push_back(v2);
+        Vertex v;
+        v.position = ring[i].position;
+        v.normal = glm::normalize(ring[i].position);
+        v.uv = glm::vec2(0.0f, 0.0f);
+        vertices.push_back(v);
+        indices.push_back(static_cast<uint32_t>(vertices.size() - 1));
       }
+
+      // Close the loop by repeating the first vertex
+      indices.push_back(ringStartIndex);
+
+      // Insert primitive restart to break the strip before the next ring
+      indices.push_back(PRIMITIVE_RESTART);
     }
   }
 
-  return vertices;
+  return {vertices, indices};
 }
 
-// load country borders from GeoJSON file
+// Load country borders from GeoJSON file
 std::vector<CountryBorder> GeoBorders::loadBordersFromGeoJSON(const std::string &filename, float radius) {
   std::vector<CountryBorder> borders;
   std::ifstream file(filename);

@@ -23,19 +23,16 @@ public:
   static glm::vec3 latLonToSphere(float lat, float lon, float radius = 1.0f);
 
   // Load borders from a simple text file (we'll create this format)
-  static std::vector<CountryBorder>
-  loadBordersFromFile(const std::string &filename);
+  static std::vector<CountryBorder> loadBordersFromFile(const std::string &filename);
 
   // Load borders from GeoJSON file
-  static std::vector<CountryBorder>
-  loadBordersFromGeoJSON(const std::string &filename, float radius = 1.0f);
+  static std::vector<CountryBorder> loadBordersFromGeoJSON(const std::string &filename, float radius = 1.0f);
 
   // Compute approximate centroid direction for each country
-  static std::unordered_map<std::string, glm::vec3>
-  computeCountryCentroids(const std::vector<CountryBorder> &borders,
-                          float radius = 1.0f);
+  static std::unordered_map<std::string, glm::vec3> computeCountryCentroids(const std::vector<CountryBorder> &borders,
+                                                                            float radius = 1.0f);
 
-  // Generate border line vertices for rendering as a Mesh
-  static std::vector<Vertex>
-  bordersToVertices(const std::vector<CountryBorder> &borders);
+  // Generate border line vertices and indices for line strips with primitive restart
+  static std::pair<std::vector<Vertex>, std::vector<uint32_t>> bordersToVerticesWithIndices(
+    const std::vector<CountryBorder> &borders);
 };

@@ -59,8 +59,6 @@ int main() {
   // ============================================
   // WINDOW SETUP
   // ============================================
-  // Initial window size (these can be changed to resize the window)
-  // Using 1600x900 for almost fullscreen on smaller laptops
   const int INITIAL_WIDTH = 1600;
   const int INITIAL_HEIGHT = 900;
 
@@ -91,8 +89,6 @@ int main() {
   // ============================================
   // SPHERE PROPERTIES
   // ============================================
-  // Radius: Size of the sphere (1.0f = unit sphere)
-  // Segments: Resolution (32 = good quality, higher = smoother but slower)
   Mesh sphere = Sphere::generate(SPHERE_RADIUS, 32);
   sphere.setupMesh();
 
@@ -107,13 +103,15 @@ int main() {
   // ============================================
   // Load country border data
   auto borders = GeoBorders::loadBordersFromGeoJSON("data/countries.geo.json", BORDER_RADIUS);
-  auto borderVertices = GeoBorders::bordersToVertices(borders);
-  Mesh borderMesh(borderVertices,
-                  std::vector<uint32_t>()); // Empty indices, just vertices
+  auto [borderVertices, borderIndices] = GeoBorders::bordersToVerticesWithIndices(borders);
+  Mesh borderMesh(borderVertices, borderIndices);
   borderMesh.setupMesh();
 
-  // Border shader
-  Shader borderShader("shaders/border.vert", "shaders/border.frag");
+  // Border shader (with geometry shader for thick lines - blue glow)
+  Shader borderShader("shaders/border.vert", "shaders/border.frag", "shaders/border.geom");
+
+  // Simple border shader (no geometry shader - for white center line)
+  Shader borderSimpleShader("shaders/border_simple.vert", "shaders/border_simple.frag");
 
   // ============================================
   // CO₂ DATA VISUALIZATION
@@ -179,8 +177,8 @@ int main() {
   const float cameraDistance = 3.0f;
   float initialAzimuth = 0.0f;
   float initialElevation = 0.0f;
-  float cameraAzimuth = initialAzimuth;     // Horizontal rotation (around Y-axis)
-  float cameraElevation = initialElevation; // Vertical angle (from horizontal plane)
+  float cameraAzimuth = initialAzimuth;
+  float cameraElevation = initialElevation;
 
   glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
   glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -197,7 +195,6 @@ int main() {
   // ============================================
   // LIGHTING SETUP
   // ============================================
-  // lightPos: Where the light source is in the scene
   glm::vec3 lightPos = glm::vec3(2.0f, 2.0f, 2.0f);
 
   // ============================================
@@ -286,15 +283,9 @@ int main() {
     // ============================================
     // TRANSFORM MATRICES
     // ============================================
-    // View matrix: Camera position and orientation
     glm::mat4 view = glm::lookAt(cameraPos, cameraTarget, cameraUp);
-
-    // Projection matrix: Field of view, aspect ratio, near/far planes
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f), // FOV (field of view) in degrees
-                                            (float)currentWidth / (float)currentHeight, // Aspect ratio
-                                            0.1f,                                       // Near clipping plane
-                                            100.0f                                      // Far clipping plane
-    );
+    glm::mat4 projection =
+      glm::perspective(glm::radians(45.0f), (float)currentWidth / (float)currentHeight, 0.1f, 100.0f);
 
     // ============================================
     // MODEL TRANSFORMATION
@@ -309,64 +300,74 @@ int main() {
     // ============================================
     shader.use();
 
-    // Send transformation matrices to GPU
     shader.setMat4("model", model);
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
-
-    // Send lighting information to GPU
     shader.setVec3("lightPos", lightPos);
     shader.setVec3("viewPos", cameraPos);
 
     // ============================================
     // SPHERE VISUAL PROPERTIES
     // ============================================
-    // sphereColor: RGB color of the sphere (0.0 to 1.0 range)
-    // This is blue: (red=0.2, green=0.5, blue=1.0)
     shader.setVec3("sphereColor", glm::vec3(0.2f, 0.5f, 1.0f));
 
     // Draw sphere
     sphere.draw();
 
     // ============================================
-    // COUNTRY BORDER RENDERING
+    // COUNTRY BORDER RENDERING - Neon Effect
     // ============================================
+    // Two-layer rendering: thick blue glow with additive blending, then thin white center line
     borderShader.use();
     borderShader.setMat4("model", model);
     borderShader.setMat4("view", view);
     borderShader.setMat4("projection", projection);
-    borderShader.setVec3("borderColor", glm::vec3(1.0f, 1.0f, 1.0f)); // White borders
+    borderShader.setVec3("borderColor", glm::vec3(0.4f, 0.7f, 1.0f));
+    borderShader.setFloat("uTime", static_cast<float>(glfwGetTime()));
 
-    borderMesh.drawLines();
+    // Layer 1: Thick blue glow with additive blending
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    glDepthMask(GL_FALSE);
+    borderShader.setFloat("uGlowIntensity", 1.0f);
+    borderShader.setFloat("uLineWidth", 8.0f);
+    borderShader.setFloat("uAltitudeOffset", 0.0f);
+    borderMesh.drawLineStrip();
+
+    // Layer 2: Thin white center line (elevated above blue glow)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    borderSimpleShader.use();
+    borderSimpleShader.setMat4("model", model);
+    borderSimpleShader.setMat4("view", view);
+    borderSimpleShader.setMat4("projection", projection);
+    borderSimpleShader.setFloat("uAltitudeOffset", 0.001f);
+    glLineWidth(1.0f);
+    borderMesh.drawLineStrip();
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
 
     // ============================================
     // CO₂ MARKER RENDERING
     // ============================================
     if (markersAvailable) {
-      // Use standard alpha blending for matte smog appearance
-      // This prevents the "glowing light" effect and makes it look more like fog
       glEnable(GL_BLEND);
-      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // Standard alpha blending
-      glDepthMask(GL_FALSE);                             // Don't write to depth buffer for transparency
+      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      glDepthMask(GL_FALSE);
 
       dataShader.use();
       dataShader.setMat4("model", model);
       dataShader.setMat4("view", view);
       dataShader.setMat4("projection", projection);
-      dataShader.setFloat("uTime", angle); // Pass time for future animations
+      dataShader.setFloat("uTime", angle);
       markerMesh.draw();
 
-      // Restore depth writing
       glDepthMask(GL_TRUE);
     }
 
     // ============================================
     // TEXT RENDERING
     // ============================================
-    // Disable depth test for text overlay
     glDisable(GL_DEPTH_TEST);
-
-    // Enable blending for text transparency
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -423,7 +424,7 @@ void processInput(GLFWwindow *window, YearController &yearController, BreatheAni
     rPressed = false;
   }
 
-  // Arrow key controls for year navigation (disabled during breathe animation)
+  // Arrow key controls for year navigation
   if (!breatheAnimation.getIsActive()) {
     static bool leftPressed = false;
     static bool rightPressed = false;

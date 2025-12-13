@@ -2,8 +2,7 @@
 #include <glad/glad.h>
 #include <iostream>
 
-Mesh::Mesh(const std::vector<Vertex> &vertices,
-           const std::vector<uint32_t> &indices)
+Mesh::Mesh(const std::vector<Vertex> &vertices, const std::vector<uint32_t> &indices)
     : vertices(vertices), indices(indices), initialized(false) {}
 
 Mesh::Mesh(Mesh &&other) noexcept {
@@ -38,7 +37,9 @@ Mesh &Mesh::operator=(Mesh &&other) noexcept {
   return *this;
 }
 
-Mesh::~Mesh() { cleanupGL(); }
+Mesh::~Mesh() {
+  cleanupGL();
+}
 
 void Mesh::setupMesh() {
   if (initialized) {
@@ -58,32 +59,27 @@ void Mesh::setupMesh() {
   // Generate and bind VBO
   glGenBuffers(1, &VBO);
   glBindBuffer(GL_ARRAY_BUFFER, VBO);
-  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex),
-               vertices.data(), GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
 
   // Generate and bind EBO (if indices exist)
   if (!indices.empty()) {
     glGenBuffers(1, &EBO);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint32_t),
-                 indices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint32_t), indices.data(), GL_STATIC_DRAW);
   }
 
   // Set up vertex attributes
   // Position (location 0)
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                        (void *)offsetof(Vertex, position));
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, position));
 
   // Normal (location 1)
   glEnableVertexAttribArray(1);
-  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                        (void *)offsetof(Vertex, normal));
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, normal));
 
   // UV (location 2)
   glEnableVertexAttribArray(2);
-  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                        (void *)offsetof(Vertex, uv));
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, uv));
 
   // Unbind VAO
   glBindVertexArray(0);
@@ -125,6 +121,27 @@ void Mesh::drawLines() const {
   glBindVertexArray(0);
 }
 
+void Mesh::drawLineStrip() const {
+  if (!initialized) {
+    std::cerr << "Error: Cannot draw uninitialized mesh.\n";
+    return;
+  }
+
+  glBindVertexArray(VAO);
+
+  if (!indices.empty()) {
+    // Enable primitive restart for line strips (breaks strips at 0xFFFFFFFF index)
+    glEnable(GL_PRIMITIVE_RESTART);
+    glPrimitiveRestartIndex(0xFFFFFFFF);
+    glDrawElements(GL_LINE_STRIP, indices.size(), GL_UNSIGNED_INT, 0);
+    glDisable(GL_PRIMITIVE_RESTART);
+  } else {
+    glDrawArrays(GL_LINE_STRIP, 0, vertices.size());
+  }
+
+  glBindVertexArray(0);
+}
+
 void Mesh::drawInstanced(unsigned int instanceCount) const {
   if (!initialized) {
     std::cerr << "Error: Cannot draw uninitialized mesh.\n";
@@ -134,8 +151,7 @@ void Mesh::drawInstanced(unsigned int instanceCount) const {
   glBindVertexArray(VAO);
 
   if (!indices.empty()) {
-    glDrawElementsInstanced(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0,
-                            instanceCount);
+    glDrawElementsInstanced(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0, instanceCount);
   } else {
     glDrawArraysInstanced(GL_TRIANGLES, 0, vertices.size(), instanceCount);
   }
@@ -157,8 +173,7 @@ void Mesh::updateVertexData(const std::vector<Vertex> &newVertices) {
   vertices = newVertices;
 
   glBindBuffer(GL_ARRAY_BUFFER, VBO);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, vertices.size() * sizeof(Vertex),
-                  vertices.data());
+  glBufferSubData(GL_ARRAY_BUFFER, 0, vertices.size() * sizeof(Vertex), vertices.data());
   glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
