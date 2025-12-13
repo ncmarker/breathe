@@ -14,3 +14,4 @@ void main() {
     FragColor = vec4(ringColor, 1.0 * uAlphaMultiplier);
 }
 
+
