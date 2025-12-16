@@ -294,6 +294,9 @@ int main() {
   // LIGHTING SETUP
   // ============================================
   glm::vec3 lightPos = glm::vec3(2.0f, 2.0f, 2.0f);
+  float ambientStrength = 0.15f;
+  glm::vec3 ambientColor = glm::vec3(0.1f, 0.2f, 0.4f);
+  float emissiveStrength = 0.3f;
 
   // ============================================
   // MOUSE INPUT SETUP
@@ -403,11 +406,14 @@ int main() {
     shader.setMat4("projection", projection);
     shader.setVec3("lightPos", lightPos);
     shader.setVec3("viewPos", cameraPos);
+    shader.setFloat("ambientStrength", ambientStrength);
+    shader.setVec3("ambientColor", ambientColor);
+    shader.setFloat("emissiveStrength", emissiveStrength);
 
     // ============================================
     // SPHERE VISUAL PROPERTIES
     // ============================================
-    shader.setVec3("sphereColor", glm::vec3(0.2f, 0.5f, 1.0f));
+    shader.setVec3("sphereColor", glm::vec3(0.25f, 0.45f, 0.65f));
 
     // Draw sphere
     sphere.draw();
